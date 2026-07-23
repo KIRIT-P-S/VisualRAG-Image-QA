@@ -1,0 +1,1032 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Pixel RAG — Visual Document QA</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Inter:wght@300;400;500;600&display=swap');
+
+  :root {
+    --bg:        #0c0f14;
+    --surface:   #13181f;
+    --surface2:  #1a2130;
+    --border:    #232d3d;
+    --accent:    #3b82f6;
+    --accent2:   #60a5fa;
+    --success:   #22c55e;
+    --warn:      #f59e0b;
+    --danger:    #ef4444;
+    --text:      #e2e8f0;
+    --muted:     #64748b;
+    --mono:      'IBM Plex Mono', monospace;
+    --sans:      'Inter', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .app { display: flex; height: 100vh; overflow: hidden; }
+
+  .sidebar {
+    width: 300px;
+    min-width: 300px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+  }
+
+  .sidebar-header {
+    padding: 20px 20px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 4px;
+  }
+
+  .logo-icon {
+    width: 32px; height: 32px;
+    background: linear-gradient(135deg, var(--accent), #8b5cf6);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+  }
+
+  .logo-name {
+    font-family: var(--mono);
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    color: var(--text);
+  }
+
+  .logo-tag {
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.3px;
+  }
+
+  .status-bar {
+    margin: 12px 16px;
+    padding: 10px 12px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+  }
+
+  .status-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--muted);
+    flex-shrink: 0;
+    transition: background 0.3s;
+  }
+  .status-dot.online  { background: var(--success); box-shadow: 0 0 6px var(--success); }
+  .status-dot.offline { background: var(--danger); }
+
+  .status-text { color: var(--muted); }
+
+  .upload-section { padding: 0 16px 16px; }
+  .section-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+
+  .drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: 10px;
+    padding: 20px 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    position: relative;
+  }
+  .drop-zone:hover, .drop-zone.dragover {
+    border-color: var(--accent);
+    background: rgba(59,130,246,0.05);
+  }
+
+  .drop-icon { font-size: 24px; margin-bottom: 8px; }
+  .drop-text { font-size: 13px; color: var(--muted); line-height: 1.4; }
+  .drop-text strong { color: var(--text); }
+
+  #fileInput { display: none; }
+
+  .upload-btn {
+    width: 100%;
+    margin-top: 10px;
+    padding: 9px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 7px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: var(--sans);
+    transition: background 0.2s, opacity 0.2s;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+  }
+  .upload-btn:hover { background: var(--accent2); }
+  .upload-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .progress-wrap {
+    margin-top: 8px;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+    display: none;
+  }
+  .progress-wrap.active { display: block; }
+  .progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), #8b5cf6);
+    width: 0%;
+    transition: width 0.4s ease;
+    border-radius: 2px;
+  }
+
+  .docs-section {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 16px 16px;
+    border-top: 1px solid var(--border);
+    padding-top: 12px;
+  }
+
+  .doc-chip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    margin-bottom: 6px;
+    font-size: 12px;
+  }
+
+  .doc-chip-icon { font-size: 14px; flex-shrink: 0; }
+  .doc-chip-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text);
+  }
+  .doc-chip-pages {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    background: var(--border);
+    padding: 2px 6px;
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+
+  .empty-docs {
+    font-size: 12px;
+    color: var(--muted);
+    text-align: center;
+    padding: 20px 0;
+    line-height: 1.6;
+  }
+
+  .main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .topbar {
+    padding: 14px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .topbar-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text);
+  }
+
+  .topbar-sub { font-size: 12px; color: var(--muted); margin-top: 1px; }
+
+  .topbar-actions { display: flex; gap: 8px; }
+
+  .btn-sm {
+    padding: 6px 12px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    font-family: var(--sans);
+    transition: color 0.2s, border-color 0.2s;
+  }
+  .btn-sm:hover { color: var(--text); border-color: var(--accent); }
+
+  .chat-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    scroll-behavior: smooth;
+  }
+
+  .welcome {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    text-align: center;
+    padding: 40px 20px;
+  }
+
+  .welcome-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+    filter: drop-shadow(0 0 20px rgba(59,130,246,0.4));
+  }
+
+  .welcome-title {
+    font-size: 22px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    background: linear-gradient(90deg, var(--text), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .welcome-sub {
+    font-size: 14px;
+    color: var(--muted);
+    max-width: 400px;
+    line-height: 1.6;
+    margin-bottom: 28px;
+  }
+
+  .example-queries {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    max-width: 520px;
+    width: 100%;
+  }
+
+  .example-q {
+    padding: 12px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-size: 13px;
+    color: var(--muted);
+    cursor: pointer;
+    text-align: left;
+    transition: border-color 0.2s, color 0.2s, background 0.2s;
+    line-height: 1.4;
+  }
+  .example-q:hover {
+    border-color: var(--accent);
+    color: var(--text);
+    background: rgba(59,130,246,0.05);
+  }
+
+  .msg { display: flex; gap: 12px; max-width: 100%; }
+  .msg.user { flex-direction: row-reverse; }
+
+  .msg-avatar {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+  .msg.user   .msg-avatar { background: var(--accent); }
+  .msg.system .msg-avatar { background: linear-gradient(135deg, #8b5cf6, var(--accent)); }
+
+  .msg-body { flex: 1; min-width: 0; }
+
+  .msg-bubble {
+    padding: 12px 16px;
+    border-radius: 12px;
+    font-size: 14px;
+    line-height: 1.6;
+    max-width: 680px;
+  }
+  .msg.user   .msg-bubble {
+    background: var(--accent);
+    color: #fff;
+    margin-left: auto;
+    border-bottom-right-radius: 4px;
+  }
+  .msg.system .msg-bubble {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-bottom-left-radius: 4px;
+  }
+
+  .sources {
+    margin-top: 12px;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .source-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    width: 160px;
+    cursor: pointer;
+    transition: border-color 0.2s, transform 0.15s;
+  }
+  .source-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+
+  .source-thumb {
+    width: 100%;
+    height: 100px;
+    object-fit: cover;
+    display: block;
+    background: var(--border);
+  }
+
+  .source-info {
+    padding: 7px 9px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .source-label { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+  .source-score {
+    font-size: 10px;
+    font-family: var(--mono);
+    color: var(--accent2);
+    background: rgba(59,130,246,0.1);
+    padding: 2px 5px;
+    border-radius: 4px;
+  }
+
+  .thinking {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+    padding: 14px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    border-bottom-left-radius: 4px;
+    width: fit-content;
+  }
+  .thinking-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+  .thinking-dot:nth-child(2) { animation-delay: 0.2s; }
+  .thinking-dot:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes pulse {
+    0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+    40%           { opacity: 1;   transform: scale(1); }
+  }
+
+  .input-bar {
+    padding: 16px 24px;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+  }
+
+  .input-wrap {
+    flex: 1;
+    position: relative;
+  }
+
+  #queryInput {
+    width: 100%;
+    padding: 12px 14px;
+    padding-right: 100px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    outline: none;
+    resize: none;
+    min-height: 46px;
+    max-height: 160px;
+    line-height: 1.5;
+    transition: border-color 0.2s;
+    overflow-y: auto;
+  }
+  #queryInput:focus { border-color: var(--accent); }
+  #queryInput::placeholder { color: var(--muted); }
+
+  .input-meta {
+    position: absolute;
+    right: 10px;
+    bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .topk-select {
+    background: var(--border);
+    border: none;
+    color: var(--muted);
+    font-size: 11px;
+    font-family: var(--mono);
+    padding: 3px 6px;
+    border-radius: 5px;
+    cursor: pointer;
+    outline: none;
+  }
+
+  .send-btn {
+    padding: 12px 20px;
+    background: var(--accent);
+    border: none;
+    border-radius: 10px;
+    color: #fff;
+    font-size: 14px;
+    cursor: pointer;
+    font-family: var(--sans);
+    font-weight: 500;
+    transition: background 0.2s, opacity 0.2s;
+    white-space: nowrap;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .send-btn:hover   { background: var(--accent2); }
+  .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .toast-container {
+    position: fixed;
+    top: 16px; right: 16px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .toast {
+    padding: 10px 16px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 13px;
+    display: flex; align-items: center; gap: 8px;
+    animation: slideIn 0.2s ease;
+    max-width: 320px;
+  }
+  .toast.success { border-color: var(--success); }
+  .toast.error   { border-color: var(--danger); }
+  .toast.info    { border-color: var(--accent); }
+  @keyframes slideIn { from { opacity:0; transform: translateX(20px); } to { opacity:1; transform: translateX(0); } }
+
+  .modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.85);
+    z-index: 9998;
+    display: none;
+    align-items: center; justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+
+  .modal-img {
+    max-width: 90vw;
+    max-height: 90vh;
+    border-radius: 12px;
+    object-fit: contain;
+    box-shadow: 0 25px 80px rgba(0,0,0,0.6);
+  }
+  .modal-close {
+    position: absolute;
+    top: 20px; right: 24px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-size: 20px;
+    width: 40px; height: 40px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+  .error-banner {
+    margin: 0 16px 12px;
+    padding: 10px 12px;
+    background: rgba(239,68,68,0.1);
+    border: 1px solid rgba(239,68,68,0.3);
+    border-radius: 8px;
+    font-size: 12px;
+    color: #fca5a5;
+    display: none;
+  }
+  .error-banner.show { display: block; }
+</style>
+</head>
+<body>
+
+<div class="modal-overlay" id="modal" onclick="closeModal()">
+  <button class="modal-close" onclick="closeModal()">✕</button>
+  <img class="modal-img" id="modalImg" src="" alt="Page preview" />
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<div class="app">
+
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">
+        <div class="logo-icon">🔭</div>
+        <div>
+          <div class="logo-name">Pixel RAG</div>
+          <div class="logo-tag">Visual Document QA</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="status-bar" id="statusBar">
+      <div class="status-dot" id="statusDot"></div>
+      <span class="status-text" id="statusText">Connecting to backend…</span>
+    </div>
+
+    <div class="error-banner" id="errorBanner">
+      Backend offline. Make sure <code>uvicorn main:app --port 8000</code> is running.
+    </div>
+
+    <div class="upload-section">
+      <div class="section-label">Upload PDF</div>
+
+      <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+        <div class="drop-icon">📄</div>
+        <div class="drop-text">
+          <strong>Click to browse</strong> or drag & drop<br>
+          <span style="font-size:11px">PDF files only</span>
+        </div>
+        <input type="file" id="fileInput" accept=".pdf" />
+      </div>
+
+      <div class="progress-wrap" id="progressWrap">
+        <div class="progress-bar" id="progressBar"></div>
+      </div>
+
+      <button class="upload-btn" id="uploadBtn" disabled>
+        <span id="uploadBtnText">Select a PDF first</span>
+      </button>
+    </div>
+
+    <div class="docs-section">
+      <div class="section-label">Indexed Documents</div>
+      <div id="docsList">
+        <div class="empty-docs">
+          No documents indexed yet.<br>Upload a PDF to get started.
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <div class="topbar">
+      <div>
+        <div class="topbar-title">Document Query</div>
+        <div class="topbar-sub" id="topbarSub">Upload a PDF and ask anything about it</div>
+      </div>
+      <div class="topbar-actions">
+        <button class="btn-sm" onclick="clearIndex()">🗑 Clear index</button>
+        <button class="btn-sm" onclick="clearChat()">✕ Clear chat</button>
+      </div>
+    </div>
+
+    <div class="chat-area" id="chatArea">
+      <!-- Welcome screen -->
+      <div class="welcome" id="welcomeScreen">
+        <div class="welcome-icon">🔭</div>
+        <div class="welcome-title">Ask anything about your documents</div>
+        <div class="welcome-sub">
+          Pixel RAG retrieves the most visually relevant pages using CLIP embeddings,
+          then answers using Gemini Vision — so tables, diagrams, and schematics are fully understood.
+        </div>
+        <div class="example-queries">
+          <div class="example-q" onclick="setQuery(this.textContent)">Show me the torque specification for bolt assembly</div>
+          <div class="example-q" onclick="setQuery(this.textContent)">Which diagram shows the hydraulic valve?</div>
+          <div class="example-q" onclick="setQuery(this.textContent)">Summarise the key safety warnings</div>
+          <div class="example-q" onclick="setQuery(this.textContent)">What does the wiring schematic look like?</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="input-bar">
+      <div class="input-wrap">
+        <textarea
+          id="queryInput"
+          placeholder="Ask a question about your uploaded documents…"
+          rows="1"
+          onkeydown="handleKey(event)"
+          oninput="autoResize(this)"
+        ></textarea>
+        <div class="input-meta">
+          <select class="topk-select" id="topkSelect" title="Number of pages to retrieve">
+            <option value="1">top-1</option>
+            <option value="2">top-2</option>
+            <option value="3" selected>top-3</option>
+            <option value="5">top-5</option>
+          </select>
+        </div>
+      </div>
+      <button class="send-btn" id="sendBtn" onclick="sendQuery()" disabled>
+        Send ↑
+      </button>
+    </div>
+
+  </main>
+</div>
+
+<script>
+const API = 'http://127.0.0.1:8000';
+
+let selectedFile = null;
+let isQuerying   = false;
+let indexedDocs  = {};   // { doc_id: pages_count }
+
+window.addEventListener('DOMContentLoaded', () => {
+  pingBackend();
+  setInterval(pingBackend, 10000);
+  setupDrop();
+  document.getElementById('fileInput').addEventListener('change', onFileSelect);
+  document.getElementById('queryInput').addEventListener('input', updateSendBtn);
+});
+
+async function pingBackend() {
+  try {
+    const r = await fetch(`${API}/health`, { signal: AbortSignal.timeout(4000) });
+    if (r.ok) {
+      setStatus('online', 'Backend connected');
+      document.getElementById('errorBanner').classList.remove('show');
+      await refreshStatus();
+    } else throw new Error();
+  } catch {
+    setStatus('offline', 'Backend unreachable');
+    document.getElementById('errorBanner').classList.add('show');
+    document.getElementById('sendBtn').disabled = true;
+  }
+}
+
+function setStatus(state, text) {
+  const dot  = document.getElementById('statusDot');
+  const span = document.getElementById('statusText');
+  dot.className  = `status-dot ${state}`;
+  span.textContent = text;
+}
+
+async function refreshStatus() {
+  try {
+    const r = await fetch(`${API}/status`);
+    const d = await r.json();
+
+    document.getElementById('topbarSub').textContent =
+      d.total_pages_indexed > 0
+        ? `${d.total_pages_indexed} pages indexed across ${d.documents.length} document(s)`
+        : 'Upload a PDF and ask anything about it';
+
+    renderDocs(d.documents);
+    updateSendBtn();
+  } catch {}
+}
+
+function renderDocs(docs) {
+  const el = document.getElementById('docsList');
+  if (!docs || docs.length === 0) {
+    el.innerHTML = `<div class="empty-docs">No documents indexed yet.<br>Upload a PDF to get started.</div>`;
+    return;
+  }
+  el.innerHTML = docs.map(id => `
+    <div class="doc-chip">
+      <span class="doc-chip-icon">📄</span>
+      <span class="doc-chip-name" title="${id}">${id}</span>
+      <span class="doc-chip-pages">${indexedDocs[id] ? indexedDocs[id] + 'p' : '✓'}</span>
+    </div>
+  `).join('');
+}
+
+function setupDrop() {
+  const zone = document.getElementById('dropZone');
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('dragover');
+    const f = e.dataTransfer.files[0];
+    if (f && f.type === 'application/pdf') setFile(f);
+    else toast('Only PDF files are accepted.', 'error');
+  });
+}
+
+function onFileSelect(e) {
+  const f = e.target.files[0];
+  if (f) setFile(f);
+}
+
+function setFile(f) {
+  selectedFile = f;
+  const btn  = document.getElementById('uploadBtn');
+  const text = document.getElementById('uploadBtnText');
+  text.textContent = `Upload "${f.name}"`;
+  btn.disabled = false;
+  btn.onclick  = uploadFile;
+  document.querySelector('.drop-text').innerHTML =
+    `<strong>${f.name}</strong><br><span style="font-size:11px">${(f.size/1024).toFixed(0)} KB</span>`;
+}
+
+async function uploadFile() {
+  if (!selectedFile) return;
+
+  const btn      = document.getElementById('uploadBtn');
+  const text     = document.getElementById('uploadBtnText');
+  const progress = document.getElementById('progressWrap');
+  const bar      = document.getElementById('progressBar');
+
+  btn.disabled   = true;
+  text.textContent = 'Indexing pages…';
+  progress.classList.add('active');
+
+  let pct = 0;
+  const ticker = setInterval(() => {
+    pct = Math.min(pct + 3, 90);
+    bar.style.width = pct + '%';
+  }, 120);
+
+  try {
+    const fd = new FormData();
+    fd.append('file', selectedFile);
+
+    const r = await fetch(`${API}/upload`, { method: 'POST', body: fd });
+    const d = await r.json();
+
+    clearInterval(ticker);
+    bar.style.width = '100%';
+
+    if (r.ok && d.success) {
+      indexedDocs[d.document_id] = d.pages_indexed;
+      toast(`✓ Indexed ${d.pages_indexed} pages from "${selectedFile.name}"`, 'success');
+      await refreshStatus();
+      hideWelcome();
+    } else {
+      toast(d.detail || 'Upload failed', 'error');
+    }
+  } catch (err) {
+    clearInterval(ticker);
+    toast('Could not reach backend — is it running on port 8000?', 'error');
+  } finally {
+    setTimeout(() => {
+      progress.classList.remove('active');
+      bar.style.width = '0%';
+    }, 600);
+    text.textContent = 'Upload another PDF';
+    btn.disabled = false;
+    btn.onclick  = () => document.getElementById('fileInput').click();
+    selectedFile = null;
+    document.getElementById('fileInput').value = '';
+    updateSendBtn();
+  }
+}
+
+async function sendQuery() {
+  const input = document.getElementById('queryInput');
+  const query = input.value.trim();
+  if (!query || isQuerying) return;
+
+  const topK = parseInt(document.getElementById('topkSelect').value);
+
+  hideWelcome();
+  addUserMsg(query);
+  input.value = '';
+  autoResize(input);
+
+  isQuerying = true;
+  updateSendBtn();
+
+  const thinkingEl = addThinking();
+
+  try {
+    const r = await fetch(`${API}/query`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, top_k: topK })
+    });
+    const d = await r.json();
+    thinkingEl.remove();
+
+    if (r.ok) {
+      addSystemMsg(d.answer, d.sources);
+    } else {
+      addSystemMsg(`⚠️ ${d.detail || 'Query failed. Try again.'}`, []);
+    }
+  } catch {
+    thinkingEl.remove();
+    addSystemMsg('⚠️ Could not reach the backend. Make sure it is running on port 8000.', []);
+  } finally {
+    isQuerying = false;
+    updateSendBtn();
+    scrollChat();
+  }
+}
+
+function addUserMsg(text) {
+  const chat = document.getElementById('chatArea');
+  const el = document.createElement('div');
+  el.className = 'msg user';
+  el.innerHTML = `
+    <div class="msg-avatar">👤</div>
+    <div class="msg-body">
+      <div class="msg-bubble">${escHtml(text)}</div>
+    </div>`;
+  chat.appendChild(el);
+  scrollChat();
+}
+
+function addSystemMsg(text, sources) {
+  const chat = document.getElementById('chatArea');
+  const el = document.createElement('div');
+  el.className = 'msg system';
+
+  const thumbs = (sources || []).map((s, i) => `
+    <div class="source-card" onclick="openModal('${s.image_b64}')">
+      <img class="source-thumb" src="data:image/jpeg;base64,${s.image_b64}" alt="Page ${s.page}" loading="lazy"/>
+      <div class="source-info">
+        <span class="source-label">p.${s.page} · ${s.doc_id.slice(0,14)}</span>
+        <span class="source-score">${(s.score*100).toFixed(1)}%</span>
+      </div>
+    </div>`).join('');
+
+  el.innerHTML = `
+    <div class="msg-avatar">🔭</div>
+    <div class="msg-body">
+      <div class="msg-bubble">${formatAnswer(text)}</div>
+      ${thumbs ? `<div class="sources">${thumbs}</div>` : ''}
+    </div>`;
+  chat.appendChild(el);
+  scrollChat();
+}
+
+function addThinking() {
+  const chat = document.getElementById('chatArea');
+  const el = document.createElement('div');
+  el.className = 'msg system';
+  el.innerHTML = `
+    <div class="msg-avatar">🔭</div>
+    <div class="msg-body">
+      <div class="thinking">
+        <div class="thinking-dot"></div>
+        <div class="thinking-dot"></div>
+        <div class="thinking-dot"></div>
+      </div>
+    </div>`;
+  chat.appendChild(el);
+  scrollChat();
+  return el;
+}
+
+function formatAnswer(text) {
+  return escHtml(text)
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`(.+?)`/g, '<code style="background:var(--surface2);padding:1px 5px;border-radius:4px;font-family:var(--mono);font-size:12px">$1</code>')
+    .replace(/\n/g, '<br>');
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function scrollChat() {
+  const c = document.getElementById('chatArea');
+  setTimeout(() => c.scrollTop = c.scrollHeight, 50);
+}
+
+function hideWelcome() {
+  const w = document.getElementById('welcomeScreen');
+  if (w) w.remove();
+}
+
+function clearChat() {
+  const chat = document.getElementById('chatArea');
+  chat.innerHTML = `
+    <div class="welcome" id="welcomeScreen">
+      <div class="welcome-icon">🔭</div>
+      <div class="welcome-title">Ask anything about your documents</div>
+      <div class="welcome-sub">
+        Pixel RAG retrieves the most visually relevant pages using CLIP embeddings,
+        then answers using Gemini Vision — so tables, diagrams, and schematics are fully understood.
+      </div>
+      <div class="example-queries">
+        <div class="example-q" onclick="setQuery(this.textContent)">Show me the torque specification for bolt assembly</div>
+        <div class="example-q" onclick="setQuery(this.textContent)">Which diagram shows the hydraulic valve?</div>
+        <div class="example-q" onclick="setQuery(this.textContent)">Summarise the key safety warnings</div>
+        <div class="example-q" onclick="setQuery(this.textContent)">What does the wiring schematic look like?</div>
+      </div>
+    </div>`;
+}
+
+async function clearIndex() {
+  if (!confirm('Clear all indexed documents? This cannot be undone.')) return;
+  try {
+    await fetch(`${API}/index`, { method: 'DELETE' });
+    indexedDocs = {};
+    await refreshStatus();
+    toast('Index cleared.', 'info');
+  } catch {
+    toast('Could not clear index — backend unreachable.', 'error');
+  }
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendQuery(); }
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 160) + 'px';
+}
+
+function setQuery(text) {
+  const input = document.getElementById('queryInput');
+  input.value = text;
+  autoResize(input);
+  updateSendBtn();
+  input.focus();
+}
+
+function updateSendBtn() {
+  const query = document.getElementById('queryInput').value.trim();
+  const btn   = document.getElementById('sendBtn');
+  const online = document.getElementById('statusDot').classList.contains('online');
+  btn.disabled = !query || !online || isQuerying;
+}
+
+function openModal(b64) {
+  document.getElementById('modalImg').src = `data:image/jpeg;base64,${b64}`;
+  document.getElementById('modal').classList.add('open');
+}
+function closeModal() {
+  document.getElementById('modal').classList.remove('open');
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+function toast(msg, type = 'info') {
+  const c  = document.getElementById('toastContainer');
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  const icon = type === 'success' ? '✓' : type === 'error' ? '✕' : 'ℹ';
+  el.innerHTML = `<span>${icon}</span> ${msg}`;
+  c.appendChild(el);
+  setTimeout(() => el.remove(), 4000);
+}
+</script>
+</body>
+</html>

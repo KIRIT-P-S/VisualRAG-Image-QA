@@ -1,0 +1,23 @@
+# ── Web framework ──────────────────────────────────────────────────────────────
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+python-multipart==0.0.17      # Required for UploadFile
+
+# ── Config ─────────────────────────────────────────────────────────────────────
+pydantic-settings==2.6.1
+
+# ── PDF processing ─────────────────────────────────────────────────────────────
+pdf2image==1.17.0             # Requires poppler (see setup below)
+Pillow==11.0.0
+
+# ── CLIP embeddings (HuggingFace — free, runs locally) ─────────────────────────
+transformers==4.46.3
+torch==2.5.1+cpu              # CPU-only build
+--extra-index-url https://download.pytorch.org/whl/cpu
+numpy==1.26.4
+
+# ── Vector store ───────────────────────────────────────────────────────────────
+faiss-cpu==1.9.0              # Use faiss-gpu if you have a CUDA GPU
+
+# ── LLM generation (Google Gemini — free tier) ─────────────────────────────────
+google-generativeai==0.8.3
