@@ -597,7 +597,7 @@
     </div>
 
     <div class="error-banner" id="errorBanner">
-      Backend offline. Make sure <code>uvicorn main:app --port 8000</code> is running.
+      Backend offline. The Render service may be sleeping — try again in a few seconds.
     </div>
 
     <div class="upload-section">
@@ -689,11 +689,11 @@
 </div>
 
 <script>
-const API = 'http://127.0.0.1:8000';
+const API = 'https://visualrag-image-qa.onrender.com';
 
 let selectedFile = null;
 let isQuerying   = false;
-let indexedDocs  = {};   // { doc_id: pages_count }
+let indexedDocs  = {}; 
 
 window.addEventListener('DOMContentLoaded', () => {
   pingBackend();
@@ -822,7 +822,7 @@ async function uploadFile() {
     }
   } catch (err) {
     clearInterval(ticker);
-    toast('Could not reach backend — is it running on port 8000?', 'error');
+    toast('Could not reach backend — the Render service may be sleeping, try again.', 'error');
   } finally {
     setTimeout(() => {
       progress.classList.remove('active');
@@ -870,7 +870,7 @@ async function sendQuery() {
     }
   } catch {
     thinkingEl.remove();
-    addSystemMsg('⚠️ Could not reach the backend. Make sure it is running on port 8000.', []);
+    addSystemMsg('⚠️ Could not reach the backend. The Render service may be sleeping — try again in a few seconds.', []);
   } finally {
     isQuerying = false;
     updateSendBtn();
